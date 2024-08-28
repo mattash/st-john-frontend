@@ -20,7 +20,7 @@ export const pageType = defineType({
       }),
       defineField({
         name: 'body',
-        title: 'Body',
+        title: 'Body', 
         type: 'array',
         of: [
             { 
