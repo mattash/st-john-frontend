@@ -3,13 +3,14 @@ import { createRequire } from 'module';
 import xml2js from 'xml2js';
 import axios from 'axios';
 import { createClient } from '@sanity/client';
-import { Schema } from '@sanity/schema';
 import path from 'path';
 import {htmlToBlocks, getBlockContentFeatures} from '@sanity/block-tools'
-import { pageType } from '../sanity/schemaTypes/pageType.ts';
+import { pageType } from '../sanity/schemaTypes/pageType';
+import {Schema} from '@sanity/schema'
+import { schemaTypes } from "../sanity/schemaTypes";
+
 //import { schema } from '../sanity/schemaTypes/pageType.ts'; // Import your Sanity schema
-
-
+console.log("pageType:", pageType)
 
 // Initialize Sanity client
 const client = createClient({
@@ -73,21 +74,43 @@ async function downloadAndUploadImage(url) {
   }
 }
 
+export function getBlockContentType(schema) {
+  // Find the 'body' field
+  const bodyField = schema.get('page').fields.find((field) => field.name === 'body');
+
+  // Check if the bodyField is found and is of type 'array'
+  if (!bodyField || bodyField.type !== 'array') {
+    console.error('Body field is not defined or is not of type array.');
+    return null;
+  }
+
+  // Find the block type within the 'of' array
+  const blockContentType = bodyField.of.find((field) => field.type === 'block').type;
+  if (!blockContentType) {
+    console.error('Block content type not found in the body field.');
+    return null;
+  }
+  return blockContentType;
+}
+
+
 
 // Function to create a page document in Sanity
 async function createPageDocument(pageData) {
 
     // Get the block content type from your schema
-    //const blockContentType = schema.types.find(type => type.name === 'blockContent');
+    //const blockContentType = defaultSchema.get('portableText').fields.find(type => type.name === 'blockContent');
+		//const blockContentType = defaultSchema.get('body').fields.find((field: Record<string, string | []>) => field.name === 'body').type
 
+    const blockContentType = getBlockContentType(pageType);
 
-
-    const blockField = pageType.fields.find((field) => field.name === 'body');
-    const blockContentType = blockField ? blockField.type : null;
-
-    if (!blockContentType) {
-      throw new Error('Block content type is not defined in the schema');
+    if (blockContentType) {
+      console.log('Block content type is ready to use.');
+    } else {
+      console.error('Failed to extract blockContentType.');
     }
+
+    console.log('Block content type:', blockContentType);
 
     // Convert the HTML body content to Sanity block content
     const bodyBlocks = htmlToBlocks(pageData.body, blockContentType);

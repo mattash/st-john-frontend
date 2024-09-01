@@ -1,4 +1,5 @@
 import { defineField, defineType } from "sanity";
+import { embeddedFormType } from "./embeddedFormType";
 
 export const pageType = defineType({
     name: "page",
@@ -39,6 +40,12 @@ export const pageType = defineType({
                         what\'s on your page.`
                     }
                 ]
+            },
+            {
+              type: 'youtubeVideo'
+            },
+            {
+                type: 'embeddedForm' 
             }
         ]
       }),
@@ -63,3 +70,5 @@ export const pageType = defineType({
       }),
     ],
   });
+
+  export default pageType;
