@@ -61,12 +61,16 @@ export const pageType = defineType({
         type: 'slug',
         options: {
             source: 'title',
-            maxLength: 200, // will be ignored if slugify is set
+            maxLength: 200,
             slugify: input => input
-                                 .toLowerCase()
-                                 .replace(/\s+/g, '-')
-                                 .slice(0, 200)
-          }
+              .toLowerCase()
+              .replace(/\s+/g, '-')  // Replace spaces with hyphens
+              .replace(/[^\w\-\/]+/g, '')  // Remove all non-word chars except hyphens and slashes
+              .replace(/\-\-+/g, '-')  // Replace multiple hyphens with single hyphen
+              .replace(/^-+/, '')  // Trim hyphens from start
+              .replace(/-+$/, '')  // Trim hyphens from end
+              .slice(0, 200)
+        }
       }),
     ],
   });

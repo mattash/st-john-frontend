@@ -26,7 +26,7 @@ const client = createClient({
 });
 
 // Variable to limit the number of items to process
-const maxItemsToProcess = 2; // Set the number of items to process
+const maxItemsToProcess = 4; // Set the number of items to process
 
 // Function to extract image URL from an HTML img tag
 function extractImageUrl(htmlString) {
@@ -157,14 +157,10 @@ async function createPageDocument(pageData) {
       _id: `page_${pageData.path.replace(/\//g, '_')}`,
       title: pageData.title,
       body: bodyBlocks,
-      path: pageData.path,
-      mainImage: pageData.mainImage ? {
-        _type: 'image',
-        asset: {
-          _type: 'reference',
-          _ref: pageData.mainImage.asset._ref
-        }
-      } : null,
+      path: {
+        _type: 'slug',
+        current: pageData.path.startsWith('/') ? pageData.path.slice(1) : pageData.path
+      },
       moreImages: pageData.moreImages && pageData.moreImages.length > 0 
         ? pageData.moreImages.map(img => ({
             _type: 'image',
@@ -176,12 +172,23 @@ async function createPageDocument(pageData) {
         : [],
     };
 
+    // Only add mainImage if it exists
+    if (pageData.mainImage && pageData.mainImage.asset && pageData.mainImage.asset._ref) {
+      doc.mainImage = {
+        _type: 'image',
+        asset: {
+          _type: 'reference',
+          _ref: pageData.mainImage.asset._ref
+        }
+      };
+    }
+
     console.log('Document to be created:', JSON.stringify(doc, null, 2));
 
     await client.createOrReplace(doc);
     console.log(`Created page: ${pageData.title}`);
     // Remove downloaded images after successful document creation
-    await removeDownloadedImages(pageData);
+    await removeDownloadedImages();
   } catch (error) {
     console.error(`Failed to create page: ${pageData.title}`, error);
     if (error.response) {
