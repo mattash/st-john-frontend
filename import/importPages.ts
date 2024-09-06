@@ -1,3 +1,4 @@
+import * as fsPromises from 'fs/promises';
 import * as fs from 'fs';
 import { createRequire } from 'module';
 import xml2js from 'xml2js';
@@ -179,6 +180,8 @@ async function createPageDocument(pageData) {
 
     await client.createOrReplace(doc);
     console.log(`Created page: ${pageData.title}`);
+    // Remove downloaded images after successful document creation
+    await removeDownloadedImages(pageData);
   } catch (error) {
     console.error(`Failed to create page: ${pageData.title}`, error);
     if (error.response) {
@@ -186,6 +189,19 @@ async function createPageDocument(pageData) {
       console.error('Response status:', error.response.status);
       console.error('Response headers:', error.response.headers);
     }
+  }
+}
+
+async function removeDownloadedImages() {
+  const imageDir = './images';
+  try {
+    const files = await fsPromises.readdir(imageDir);
+    for (const file of files) {
+      await fsPromises.unlink(path.join(imageDir, file));
+      console.log(`Removed downloaded image: ${file}`);
+    }
+  } catch (error) {
+    console.error('Failed to remove images:', error);
   }
 }
 
