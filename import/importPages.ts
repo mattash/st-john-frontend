@@ -106,12 +106,34 @@ async function downloadAndUploadImage(url) {
   }
 }
 
+function extractYoutubeId(src: string): string | null {
+  const match = src.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(?:embed\/)?(.+)/);
+  return match ? match[1].split('?')[0] : null;
+}
+
+function createYoutubeBlock(node: Element): any {
+  const src = node.getAttribute('src');
+  if (!src) return null;
+
+  const youtubeId = extractYoutubeId(src);
+  if (!youtubeId) return null;
+
+  return {
+    _type: 'youtubeVideo',
+    url: `https://www.youtube.com/watch?v=${youtubeId}`
+  };
+}
+
 export function getBlockContentType() {
   // Find the 'body' field
   // get blockcontent features of the pageType 
   const schema = Schema.compile({
     name: 'mySchema',
-    types: [pageType, embeddedFormType]
+    types: [
+      pageType, 
+      embeddedFormType, 
+      youtubeInput({ apiKey: 'AIzaSyDLtuR7k1m6C0cowjNpSPiDq7mxb-wgC3I' })
+    ]
   })
 
   const pageTypeSchema = schema.get('page')
@@ -125,7 +147,23 @@ export function getBlockContentType() {
   }
   
   const blockContentType = bodyField.type
-  return blockContentType
+
+    // Create custom HTML deserializer rules
+    const customRules = [
+      {
+        deserialize(el: Element, next: any, block: any) {
+          if (el.tagName.toLowerCase() !== 'iframe') return undefined;
+          
+          const youtubeBlock = createYoutubeBlock(el);
+          return youtubeBlock ? block(youtubeBlock) : undefined;
+        }
+      }
+    ];
+
+  return {
+    ...blockContentType,
+    rules: [...(blockContentType.rules || []), ...customRules]
+  };
 }
 
 

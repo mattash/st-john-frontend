@@ -41,9 +41,9 @@ export const pageType = defineType({
                     }
                 ]
             },
-            //{
-            //  type: 'youtubeVideo'
-            //},
+            {
+              type: 'youtubeVideo'
+            },
             {
                 type: 'embeddedForm' 
             }
