@@ -1,16 +1,19 @@
-import fs from 'fs';
+import * as fs from 'fs';
 import { createRequire } from 'module';
 import xml2js from 'xml2js';
 import axios from 'axios';
 import { createClient } from '@sanity/client';
-import path from 'path';
+import * as path from 'path';
 import {htmlToBlocks, getBlockContentFeatures} from '@sanity/block-tools'
 import { pageType } from '../sanity/schemaTypes/pageType';
 import {Schema} from '@sanity/schema'
-import { schemaTypes } from "../sanity/schemaTypes";
+import { embeddedFormType } from "../sanity/schemaTypes/embeddedFormType";
 
-//import { schema } from '../sanity/schemaTypes/pageType.ts'; // Import your Sanity schema
-console.log("pageType:", pageType)
+import { schemaTypes } from "../sanity/schemaTypes";
+import { youtubeInput } from 'sanity-plugin-youtube-input';
+import { ArraySchemaType } from '@sanity/types';
+import { JSDOM } from 'jsdom';
+
 
 // Initialize Sanity client
 const client = createClient({
@@ -18,6 +21,7 @@ const client = createClient({
   dataset: 'production', // Replace with your dataset name
   token: 'skzVuyThc1ySHg86ggtC7M3vsYOWAQ8TlZJ5dl0JUNbWJb7plQnRiMRmaGS4jM6FQc3ECVsYO71nSb2rzxNRiDiBcZjvV22ARNzPRBKBZdxrem5Y5jaK8DEDtIZkZ6D1LlUe8nsVPkYqXLnFJtuHqoAIz9YNvlBhAIrKijgZ1MCb7RrMM6QS', // Replace with your Sanity API token
   useCdn: false,
+  apiVersion: '2021-03-25', // Add this line to specify the API version
 });
 
 // Variable to limit the number of items to process
@@ -46,6 +50,7 @@ async function downloadAndUploadImage(url) {
   }
 
   try {
+    console.log(`Attempting to download image from: ${url}`);
     const response = await axios.get(url, { responseType: 'arraybuffer' });
     const buffer = Buffer.from(response.data, 'binary');
     const filename = path.basename(url);
@@ -56,79 +61,131 @@ async function downloadAndUploadImage(url) {
 
     // Write the image to the file
     fs.writeFileSync(filePath, buffer);
+    console.log(`Image downloaded and saved to: ${filePath}`);
 
-     // Upload the image to Sanity
-     const imageAsset = await client.assets.upload('image', fs.createReadStream(filePath), {
-      filename,
-    });
+    // Check if the file exists and has content
+    if (!fs.existsSync(filePath) || fs.statSync(filePath).size === 0) {
+      console.error(`File does not exist or is empty: ${filePath}`);
+      return null;
+    }
 
-    // Return the image reference
-    return {
-      _type: 'image',
-      asset: { _ref: imageAsset._id },
-    };
+    // Read the file into a buffer
+    const fileBuffer = fs.readFileSync(filePath);
+
+    // Upload the image to Sanity
+    console.log(`Uploading image to Sanity: ${filename}`);
+    try {
+      const imageAsset = await client.assets.upload('image', fileBuffer, {
+        filename,
+      });
+
+      if (imageAsset && imageAsset._id) {
+        console.log(`Image successfully uploaded to Sanity. Asset ID: ${imageAsset._id}`);
+        return {
+          _type: 'image',
+          asset: { _ref: imageAsset._id },
+        };
+      } else {
+        console.error('Failed to upload image to Sanity: No asset ID returned');
+        return null;
+      }
+    } catch (uploadError) {
+      console.error('Detailed upload error:', uploadError);
+      if (uploadError.response) {
+        console.error('Response data:', uploadError.response.data);
+        console.error('Response status:', uploadError.response.status);
+        console.error('Response headers:', uploadError.response.headers);
+      }
+      return null;
+    }
 
   } catch (error) {
-    console.error(`Failed to download or upload image: ${url}`, error);
+    console.error(`Failed to download or process image: ${url}`, error);
     return null;
   }
 }
 
-export function getBlockContentType(schema) {
+export function getBlockContentType() {
   // Find the 'body' field
-  const bodyField = schema.get('page').fields.find((field) => field.name === 'body');
+  // get blockcontent features of the pageType 
+  const schema = Schema.compile({
+    name: 'mySchema',
+    types: [pageType, embeddedFormType]
+  })
 
-  // Check if the bodyField is found and is of type 'array'
-  if (!bodyField || bodyField.type !== 'array') {
-    console.error('Body field is not defined or is not of type array.');
-    return null;
+  const pageTypeSchema = schema.get('page')
+  if (!pageTypeSchema) {
+    throw new Error('Page type not found in schema')
   }
-
-  // Find the block type within the 'of' array
-  const blockContentType = bodyField.of.find((field) => field.type === 'block').type;
-  if (!blockContentType) {
-    console.error('Block content type not found in the body field.');
-    return null;
+  
+  const bodyField = pageTypeSchema.fields.find(field => field.name === 'body')
+  if (!bodyField) {
+    throw new Error('Body field not found in page type')
   }
-  return blockContentType;
+  
+  const blockContentType = bodyField.type
+  return blockContentType
 }
 
 
 
 // Function to create a page document in Sanity
 async function createPageDocument(pageData) {
-
-    // Get the block content type from your schema
-    //const blockContentType = defaultSchema.get('portableText').fields.find(type => type.name === 'blockContent');
+  // Get the block content type from your schema
+  //const blockContentType = defaultSchema.get('portableText').fields.find(type => type.name === 'blockContent');
 		//const blockContentType = defaultSchema.get('body').fields.find((field: Record<string, string | []>) => field.name === 'body').type
 
-    const blockContentType = getBlockContentType(pageType);
+  const blockContentType = getBlockContentType();
 
-    if (blockContentType) {
-      console.log('Block content type is ready to use.');
-    } else {
-      console.error('Failed to extract blockContentType.');
-    }
+  if (blockContentType !== undefined) {
+    console.log('Block content type is ready to use.');
+  } else {
+    console.error('Failed to extract blockContentType.');
+  }
 
-    console.log('Block content type:', blockContentType);
+  global.DOMParser = new JSDOM().window.DOMParser;
 
-    // Convert the HTML body content to Sanity block content
-    const bodyBlocks = htmlToBlocks(pageData.body, blockContentType);
+  // Convert the HTML body content to Sanity block content
+  const bodyBlocks = htmlToBlocks(pageData.body, blockContentType as ArraySchemaType<unknown>);
   
+  console.log('Main image data:', pageData.mainImage);
+
   try {
     const doc = {
       _type: 'page',
+      _id: `page_${pageData.path.replace(/\//g, '_')}`,
       title: pageData.title,
       body: bodyBlocks,
       path: pageData.path,
-      mainImage: pageData.mainImage ? { _type: 'image', asset: { _ref: pageData.mainImage } } : null,
-      moreImages: pageData.moreImages.length > 0 ? pageData.moreImages.map(img => ({ _type: 'image', asset: { _ref: img } })) : [],
+      mainImage: pageData.mainImage ? {
+        _type: 'image',
+        asset: {
+          _type: 'reference',
+          _ref: pageData.mainImage.asset._ref
+        }
+      } : null,
+      moreImages: pageData.moreImages && pageData.moreImages.length > 0 
+        ? pageData.moreImages.map(img => ({
+            _type: 'image',
+            asset: {
+              _type: 'reference',
+              _ref: img.asset._ref
+            }
+          }))
+        : [],
     };
+
+    console.log('Document to be created:', JSON.stringify(doc, null, 2));
 
     await client.createOrReplace(doc);
     console.log(`Created page: ${pageData.title}`);
   } catch (error) {
     console.error(`Failed to create page: ${pageData.title}`, error);
+    if (error.response) {
+      console.error('Response data:', error.response.data);
+      console.error('Response status:', error.response.status);
+      console.error('Response headers:', error.response.headers);
+    }
   }
 }
 
@@ -157,6 +214,7 @@ async function processXMLFile(filePath) {
       // Extract and download main image
       const mainImageUrl = extractImageUrl(mainImageHTML);
       const mainImage = mainImageUrl ? await downloadAndUploadImage(mainImageUrl) : null;
+      console.log('Main image after download and upload:', mainImage);
 
       // Extract and download more images
       const moreImagesRefs = [];
@@ -167,7 +225,6 @@ async function processXMLFile(filePath) {
           if (imgRef) moreImagesRefs.push(imgRef);
         }
       }
-
 
       // Create the Sanity document
       await createPageDocument({
